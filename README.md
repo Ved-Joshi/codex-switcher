@@ -15,9 +15,9 @@ A local macOS menu bar tool for opening several Codex desktop accounts from one 
 
 This is an experimental workaround for Codex desktop. The account and usage readouts come from Codex app-server in each profile. A matching process and a signed-in profile do **not** prove which identity a visible Codex window uses or which account a new task will debit. Before relying on usage routing, check the email shown in each Codex window and verify a small task against that account's usage. The [desktop test report](docs/reviews/desktop-probe-2026-09-23.md) records what has been verified so far.
 
-The profile launch approach and app-server transport were adapted from open source work described in [research](docs/research/open-source-switchers.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
+The profile launch approach and app-server transport were adapted from open source work described in [research](docs/research/open-source-switchers.md) and [third-party notices](docs/legal/third-party-notices.md).
 
-The project is MIT licensed. Adapted source retains the upstream notices listed in [third-party notices](THIRD_PARTY_NOTICES.md).
+The project is MIT licensed. Adapted source retains the upstream notices listed in [third-party notices](docs/legal/third-party-notices.md).
 
 ## Run from source
 
