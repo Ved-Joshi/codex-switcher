@@ -140,6 +140,37 @@ pub(crate) fn open_or_focus(home: &Path, profile: &str) -> Result<OpenResult, St
 }
 
 #[cfg(target_os = "macos")]
+pub(crate) fn open_or_focus_default(home: &Path) -> Result<OpenResult, String> {
+    let bundle = resolve_codex_bundle(home)?;
+    match matching_default_processes(&bundle)?[..] {
+        [pid] => {
+            focus_default_process(pid, &bundle)?;
+            return Ok(OpenResult::Focused);
+        }
+        [] => {}
+        _ => return Err("More than one existing Codex process was found.".into()),
+    }
+    let output = Command::new("/usr/bin/open")
+        .arg("-n")
+        .arg("-a")
+        .arg(&bundle)
+        .env_remove("CODEX_HOME")
+        .output()
+        .map_err(|error| format!("Could not request a Codex launch: {error}"))?;
+    if !output.status.success() {
+        return Err("macOS could not launch the existing Codex profile.".into());
+    }
+    for _ in 0..20 {
+        match matching_default_processes(&bundle)?[..] {
+            [_] => return Ok(OpenResult::Launched),
+            [] => thread::sleep(Duration::from_millis(250)),
+            _ => return Err("More than one existing Codex process was found.".into()),
+        }
+    }
+    Err("Codex opened, but the existing desktop process could not be identified.".into())
+}
+
+#[cfg(target_os = "macos")]
 fn ensure_profile_paths(home: &Path, root: &Path, plan: &DesktopLaunchPlan) -> Result<(), String> {
     if !root.starts_with(home) {
         return Err("The profile root is outside the home directory.".into());
@@ -276,10 +307,59 @@ fn matching_processes(bundle: &Path, plan: &DesktopLaunchPlan) -> Result<Vec<i32
 }
 
 #[cfg(target_os = "macos")]
+fn matching_default_processes(bundle: &Path) -> Result<Vec<i32>, String> {
+    let identifier = NSString::from_str(CODEX_BUNDLE_ID);
+    let apps = NSRunningApplication::runningApplicationsWithBundleIdentifier(&identifier);
+    let mut matches = Vec::new();
+    for app in apps.iter() {
+        let Some(url) = app.bundleURL() else { continue };
+        let Some(path) = url.path() else { continue };
+        if PathBuf::from(path.to_string()).canonicalize().ok().as_deref() != Some(bundle) {
+            continue;
+        }
+        let pid = app.processIdentifier();
+        let output = Command::new("/bin/ps")
+            .arg("-ww")
+            .arg("-p")
+            .arg(pid.to_string())
+            .arg("-o")
+            .arg("command=")
+            .output()
+            .map_err(|error| format!("Could not inspect Codex processes: {error}"))?;
+        if !output.status.success() {
+            continue;
+        }
+        let command = String::from_utf8_lossy(&output.stdout);
+        if !has_user_data_argument(&command) {
+            matches.push(pid);
+        }
+    }
+    matches.sort_unstable();
+    Ok(matches)
+}
+
+fn has_user_data_argument(command: &str) -> bool {
+    command.split_whitespace().any(|part| part == "--user-data-dir" || part.starts_with("--user-data-dir="))
+}
+
+#[cfg(target_os = "macos")]
 fn focus_process(pid: i32, bundle: &Path, plan: &DesktopLaunchPlan) -> Result<(), String> {
     if matching_processes(bundle, plan)? != [pid] {
         return Err("The matching Codex process changed before focus.".into());
     }
+    activate_process(pid)
+}
+
+#[cfg(target_os = "macos")]
+fn focus_default_process(pid: i32, bundle: &Path) -> Result<(), String> {
+    if matching_default_processes(bundle)? != [pid] {
+        return Err("The existing Codex process changed before focus.".into());
+    }
+    activate_process(pid)
+}
+
+#[cfg(target_os = "macos")]
+fn activate_process(pid: i32) -> Result<(), String> {
     let app = NSRunningApplication::runningApplicationWithProcessIdentifier(pid)
         .ok_or_else(|| "The matching Codex process exited before focus.".to_string())?;
     // Adapted from ai-profiles' focus_pid: a windowless process needs the
@@ -317,7 +397,27 @@ fn contains_exact_argument(command: &str, argument: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::DesktopLaunchPlan;
+    use super::{has_user_data_argument, DesktopLaunchPlan};
+
+    #[test]
+    fn distinguishes_existing_desktop_from_isolated_profiles() {
+        assert!(!has_user_data_argument("/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"));
+        assert!(has_user_data_argument("/Applications/ChatGPT.app/Contents/MacOS/ChatGPT --user-data-dir=/tmp/isolated profile"));
+        assert!(has_user_data_argument("/Applications/ChatGPT.app/Contents/MacOS/ChatGPT --user-data-dir /tmp/isolated"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "requires the existing Codex desktop process to be running"]
+    fn focuses_existing_default_profile_without_launching_another() {
+        let home = std::env::var_os("HOME").unwrap();
+        let home = std::path::Path::new(&home);
+        let bundle = super::resolve_codex_bundle(home).unwrap();
+        let before = super::matching_default_processes(&bundle).unwrap();
+        assert_eq!(before.len(), 1);
+        assert_eq!(super::open_or_focus_default(home).unwrap(), super::OpenResult::Focused);
+        assert_eq!(super::matching_default_processes(&bundle).unwrap(), before);
+    }
     use std::ffi::OsString;
     use std::path::Path;
 

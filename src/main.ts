@@ -239,7 +239,8 @@ function render() {
       nameRow.append(rename);
     }
     details.append(nameRow);
-    const subtitle = [profile.customName ? status?.email : null, status?.plan ? planLabel(status.plan) : null]
+    const subtitle = [profile.id === "default" ? "Your existing Codex" : null,
+      profile.customName ? status?.email : null, status?.plan ? planLabel(status.plan) : null]
       .filter(Boolean).join(" · ");
     if (subtitle) details.append(make("span", "account-email", subtitle));
     const open = make("button", "open-button", status?.signedIn ? "Open" : "Sign in") as HTMLButtonElement;
@@ -266,7 +267,8 @@ function render() {
       render();
       accounts.querySelector<HTMLButtonElement>(".remove-confirm .confirm-remove")?.focus();
     });
-    actions.append(open, remove);
+    actions.append(open);
+    if (profile.id !== "default") actions.append(remove);
     header.append(details, actions);
     card.append(header);
     if (status?.email && duplicates.has(status.email.toLowerCase())) {

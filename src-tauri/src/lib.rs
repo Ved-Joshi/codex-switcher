@@ -90,6 +90,15 @@ async fn list_profiles(app: tauri::AppHandle, state: tauri::State<'_, ShellState
     let mut unreadable_active = false;
     let mut connected = Vec::new();
     let mut notice = None;
+    let default_status = account::read_profile(&home, "default").await;
+    if let Some(email) = default_status.email.as_deref() {
+        active_emails.insert(email_key(email), "default".to_string());
+        connected.push(profiles::Profile {
+            id: "default".into(),
+            label: "Existing Codex".into(),
+            custom_name: saved_profile_name(&app, "default")?,
+        });
+    }
     for mut profile in saved {
         if profiles::is_removed(&home, &profile.id) {
             continue;
@@ -187,6 +196,10 @@ async fn restore_account(app: tauri::AppHandle, state: tauri::State<'_, ShellSta
     let target = account::read_profile(&home, &profile).await.email
         .ok_or("Could not verify this account's email. Try again after Codex sign-in is available.")?;
     let target_key = email_key(&target);
+    if account::read_profile(&home, "default").await.email
+        .as_deref().is_some_and(|email| email_key(email) == target_key) {
+        return Err(format!("{target} is already connected in your existing Codex app."));
+    }
     for item in saved {
         if item.id == profile || profiles::is_removed(&home, &item.id) || !profiles::is_connected(&home, &item.id) {
             continue;
@@ -219,7 +232,7 @@ fn saved_profile_name(app: &tauri::AppHandle, id: &str) -> Result<Option<String>
 #[tauri::command]
 fn set_profile_name(app: tauri::AppHandle, profile: String, name: String) -> Result<(), String> {
     let home = app.path().home_dir().map_err(|_| "Could not find the home directory.")?;
-    if !profiles::is_connected(&home, &profile) {
+    if profile != "default" && !profiles::is_connected(&home, &profile) {
         return Err("This account is not connected.".into());
     }
     let name = name.trim();
@@ -259,10 +272,14 @@ async fn get_account_status(app: tauri::AppHandle, profile: String) -> account::
 #[tauri::command]
 fn open_account(app: tauri::AppHandle, profile: String) -> Result<String, String> {
     let home = app.path().home_dir().map_err(|_| "Could not find the home directory.")?;
-    if !profiles::is_connected(&home, &profile) {
+    if profile != "default" && !profiles::is_connected(&home, &profile) {
         return Err("This account profile is not connected.".into());
     }
-    let result = desktop::open_or_focus(&home, &profile)?;
+    let result = if profile == "default" {
+        desktop::open_or_focus_default(&home)?
+    } else {
+        desktop::open_or_focus(&home, &profile)?
+    };
     let message = match result {
         desktop::OpenResult::Focused => "Focused",
         desktop::OpenResult::Launched => "Opened",

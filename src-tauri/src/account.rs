@@ -56,6 +56,28 @@ pub(crate) fn unavailable(profile: &str, reason: &str) -> AccountStatus {
 
 pub(crate) async fn read_profile(home: &Path, profile: &str) -> AccountStatus {
     let mut status = AccountStatus::empty(profile);
+    if profile == "default" {
+        let codex_home = home.join(".codex");
+        let valid = std::fs::symlink_metadata(&codex_home).is_ok_and(|metadata| {
+            metadata.is_dir() && !metadata.file_type().is_symlink()
+                && metadata.uid() == unsafe { libc::geteuid() }
+        });
+        if !valid {
+            status.error = Some("Existing Codex data directory is unavailable.".into());
+            return status;
+        }
+        match read_account(&codex_home).await {
+            Ok((email, plan, windows, usage_error)) => {
+                status.signed_in = email.is_some();
+                status.email = email;
+                status.plan = plan;
+                status.windows = windows;
+                status.usage_error = usage_error;
+            }
+            Err(reason) => status.error = Some(reason),
+        }
+        return status;
+    }
     let root = home.join("Library/Application Support/Codex Switcher/probe");
     let plan = match crate::desktop::DesktopLaunchPlan::for_profile(&root, profile) {
         Ok(plan) => plan,
