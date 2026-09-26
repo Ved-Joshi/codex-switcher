@@ -1,0 +1,7 @@
+# Third party notices
+
+The experimental desktop probe adapts the profile launch approach from [edihasaj/codex-account-switcher](https://github.com/edihasaj/codex-account-switcher), commit `5acfb58360969746fc75718d52113db5cc10c5e3`: launch the unchanged Codex app with both `CODEX_HOME` and Electron `--user-data-dir` set to separate profile directories. The upstream project is MIT licensed. Its copyright and license text are preserved in [EDIHASAJ_LICENSE.txt](EDIHASAJ_LICENSE.txt).
+
+The source project reports that this launch approach works for its tested setup. Our probe still treats the result as unverified until the active account and history are checked on this Mac and Codex version.
+
+The Rust desktop adapter adapts the PID-addressed macOS reopen event from [bartekczyz/ai-profiles](https://github.com/bartekczyz/ai-profiles/blob/8c6f685a62a8e570f57e5072c01ee070fa4ef148/apps/ai-profiles/src-tauri/src/launch.rs), commit `8c6f685a62a8e570f57e5072c01ee070fa4ef148`. Its installed ChatGPT/Codex app candidates also informed bundle discovery. The account module adapts its [Codex app-server JSON line transport](https://github.com/bartekczyz/ai-profiles/blob/8c6f685a62a8e570f57e5072c01ee070fa4ef148/apps/ai-profiles/src-tauri/src/codex_rpc.rs) to read each profile's account and rate limits. The upstream project is MIT licensed; its copyright and license text are preserved in [AI_PROFILES_LICENSE.txt](AI_PROFILES_LICENSE.txt). This project does not include its credential, migration, session transfer, or launcher bundle code.

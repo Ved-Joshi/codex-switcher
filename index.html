@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Codex Switcher</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <main class="panel">
+      <header class="topbar">
+        <div class="heading"><h1 id="panel-heading">Accounts</h1><span id="updated" class="updated">Checking…</span></div>
+        <div class="top-actions">
+          <button id="refresh" class="icon-button" type="button" title="Refresh usage" aria-label="Refresh usage">↻</button>
+          <button id="settings-button" class="icon-button" type="button" title="Settings" aria-label="Settings">⚙</button>
+          <button id="back-button" class="text-button" type="button" hidden>Done</button>
+        </div>
+      </header>
+      <section id="accounts-view" class="view" aria-labelledby="panel-heading">
+        <div id="accounts" class="account-list" aria-live="polite"></div>
+        <button id="add-account" class="add-button" type="button"><span class="plus" aria-hidden="true">+</span><span>Connect another account</span><span class="arrow" aria-hidden="true">↗</span></button>
+        <p class="footnote">Each account has its own sign-in and Codex history. Your local project folders are shared.</p>
+      </section>
+      <section id="settings-view" class="view" hidden aria-labelledby="panel-heading">
+        <div class="settings-card"><label class="toggle-row" for="launch-at-login"><span><strong>Open at login</strong><small>Keep Codex Switcher in the menu bar.</small></span><input id="launch-at-login" type="checkbox" /></label></div>
+        <div class="settings-card">
+          <h2>Manage accounts</h2>
+          <div id="managed-accounts" class="managed-accounts"></div>
+          <div id="removed-accounts" class="removed-accounts" hidden></div>
+          <p class="settings-note">Removing an account hides it here. Its Codex data stays on this Mac and you can restore it later.</p>
+        </div>
+        <div class="settings-card">
+          <h2>About</h2>
+          <p class="about-line">Codex Switcher <span id="app-version">version …</span></p>
+          <p class="settings-note">A local, unofficial menu bar tool. Your account sign in stays with Codex.</p>
+          <div class="update-row">
+            <span id="update-status" class="settings-note" role="status">Updates are checked from GitHub Releases.</span>
+            <button id="check-update" class="manage-button" type="button">Check now</button>
+          </div>
+          <button id="view-update" class="update-button" type="button" hidden>View update</button>
+        </div>
+        <p class="footnote">Usage comes from Codex for each saved account. The switcher cannot yet verify which account a visible Codex window is using.</p>
+        <button id="quit" class="quit-button" type="button">Quit Codex Switcher</button>
+      </section>
+      <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+    </main>
+  </body>
+</html>
