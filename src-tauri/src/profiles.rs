@@ -73,8 +73,12 @@ pub(crate) fn is_removed(home: &Path, id: &str) -> bool {
 }
 
 fn is_pending(home: &Path, id: &str) -> bool {
-    !is_connected(home, id) && fs::symlink_metadata(marker(home, id, ".pending"))
+    !is_removed(home, id) && !is_connected(home, id) && fs::symlink_metadata(marker(home, id, ".pending"))
         .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+}
+
+pub(crate) fn quarantine_pending_duplicate(home: &Path, id: &str) -> Result<(), String> {
+    create_marker(home, id, ".removed")
 }
 
 fn create_marker(home: &Path, id: &str, name: &str) -> Result<(), String> {
@@ -146,7 +150,7 @@ pub(crate) fn add(home: &Path) -> Result<Profile, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_connected, is_pending, is_removed, label, mark_connected, mark_pending, mark_removed, profiles_dir, restore, sort_key};
+    use super::{is_connected, is_pending, is_removed, label, mark_connected, mark_pending, mark_removed, profiles_dir, quarantine_pending_duplicate, restore, sort_key};
     #[test]
     fn legacy_accounts_precede_numbered_accounts() {
         assert!(sort_key("A") < sort_key("B"));
@@ -182,6 +186,20 @@ mod tests {
         restore(&home, "account-3").unwrap();
         assert!(is_connected(&home, "account-3"));
         assert_eq!(std::fs::read_to_string(retained_data).unwrap(), "kept");
+        std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn duplicate_pending_profile_is_not_reused_for_another_connection() {
+        let home = std::env::temp_dir().join(format!("codex-switcher-duplicate-{}", std::process::id()));
+        let account = profiles_dir(&home).join("account-3");
+        std::fs::create_dir_all(&account).unwrap();
+        mark_pending(&home, "account-3").unwrap();
+        quarantine_pending_duplicate(&home, "account-3").unwrap();
+        assert!(is_removed(&home, "account-3"));
+        assert!(!is_pending(&home, "account-3"));
+        restore(&home, "account-3").unwrap();
+        assert!(is_pending(&home, "account-3"));
         std::fs::remove_dir_all(home).unwrap();
     }
 }

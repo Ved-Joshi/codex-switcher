@@ -4,6 +4,7 @@ mod profiles;
 
 use serde::Serialize;
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -17,6 +18,7 @@ struct ShellState {
     startup_error: Mutex<Option<String>>,
     last_action: Mutex<Option<String>>,
     profile_add_lock: Mutex<()>,
+    profile_state_lock: tokio::sync::Mutex<()>,
 }
 
 #[derive(Serialize)]
@@ -46,19 +48,70 @@ struct RemovedAccount {
     email: Option<String>,
 }
 
+#[derive(Serialize)]
+struct ProfileList {
+    profiles: Vec<profiles::Profile>,
+    notice: Option<String>,
+}
+
+fn email_key(email: &str) -> String {
+    email.trim().to_lowercase()
+}
+
+fn duplicate_profile(
+    email: &str,
+    was_connected: bool,
+    active_emails: &HashMap<String, String>,
+    removed_emails: &HashMap<String, String>,
+) -> bool {
+    let key = email_key(email);
+    active_emails.contains_key(&key) || (!was_connected && removed_emails.contains_key(&key))
+}
+
 #[tauri::command]
-async fn list_profiles(app: tauri::AppHandle) -> Result<Vec<profiles::Profile>, String> {
+async fn list_profiles(app: tauri::AppHandle, state: tauri::State<'_, ShellState>) -> Result<ProfileList, String> {
+    let _guard = state.profile_state_lock.lock().await;
     let home = app
         .path()
         .home_dir()
         .map_err(|reason| format!("Could not find the home directory: {reason}"))?;
+    let saved = profiles::list(&home)?;
+    let mut removed_emails = HashMap::new();
+    let mut unreadable_removed = false;
+    for profile in &saved {
+        if profiles::is_removed(&home, &profile.id) {
+            match account::read_profile(&home, &profile.id).await.email {
+                Some(email) => { removed_emails.insert(email_key(&email), profile.id.clone()); }
+                None => unreadable_removed = true,
+            }
+        }
+    }
+    let mut active_emails = HashMap::new();
+    let mut unreadable_active = false;
     let mut connected = Vec::new();
-    for mut profile in profiles::list(&home)? {
+    let mut notice = None;
+    for mut profile in saved {
         if profiles::is_removed(&home, &profile.id) {
             continue;
         }
-        if !profiles::is_connected(&home, &profile.id) {
-            let status = account::read_profile(&home, &profile.id).await;
+        let was_connected = profiles::is_connected(&home, &profile.id);
+        let status = account::read_profile(&home, &profile.id).await;
+        if let Some(email) = status.email.as_deref() {
+            let key = email_key(email);
+            if duplicate_profile(email, was_connected, &active_emails, &removed_emails) {
+                profiles::quarantine_pending_duplicate(&home, &profile.id)?;
+                notice = Some(format!("{email} is already saved. The extra profile was moved to Removed accounts. Its data was kept."));
+                continue;
+            }
+            if !was_connected && (unreadable_active || unreadable_removed) {
+                notice = Some("Could not verify every saved account. Finish account setup after refreshing again.".into());
+                continue;
+            }
+            active_emails.insert(key, profile.id.clone());
+        } else if was_connected {
+            unreadable_active = true;
+        }
+        if !was_connected {
             if status.signed_in {
                 profiles::mark_connected(&home, &profile.id)?;
             } else if status.error.is_none() {
@@ -70,7 +123,31 @@ async fn list_profiles(app: tauri::AppHandle) -> Result<Vec<profiles::Profile>, 
             connected.push(profile);
         }
     }
-    Ok(connected)
+    Ok(ProfileList { profiles: connected, notice })
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::{duplicate_profile, email_key};
+    use std::collections::HashMap;
+
+    #[test]
+    fn pending_sign_in_cannot_duplicate_a_removed_email() {
+        let mut removed = HashMap::new();
+        removed.insert(email_key("Person@Example.com"), "B".to_string());
+        assert!(duplicate_profile(" person@example.com ", false, &HashMap::new(), &removed));
+        assert!(!duplicate_profile("other@example.com", false, &HashMap::new(), &removed));
+    }
+
+    #[test]
+    fn connected_duplicate_is_hidden_but_a_removed_record_does_not_hide_it() {
+        let mut active = HashMap::new();
+        let mut removed = HashMap::new();
+        active.insert(email_key("person@example.com"), "A".to_string());
+        removed.insert(email_key("old@example.com"), "B".to_string());
+        assert!(duplicate_profile("PERSON@example.com", true, &active, &removed));
+        assert!(!duplicate_profile("old@example.com", true, &active, &removed));
+    }
 }
 
 #[tauri::command]
@@ -97,10 +174,28 @@ fn remove_account(app: tauri::AppHandle, profile: String) -> Result<(), String> 
 }
 
 #[tauri::command]
-fn restore_account(app: tauri::AppHandle, profile: String) -> Result<(), String> {
+async fn restore_account(app: tauri::AppHandle, state: tauri::State<'_, ShellState>, profile: String) -> Result<(), String> {
+    let _guard = state.profile_state_lock.lock().await;
     let home = app.path().home_dir().map_err(|_| "Could not find the home directory.")?;
-    if !profiles::list(&home)?.iter().any(|saved| saved.id == profile) {
+    let saved = profiles::list(&home)?;
+    if !saved.iter().any(|item| item.id == profile) {
         return Err("This account profile does not exist.".into());
+    }
+    if !profiles::is_removed(&home, &profile) {
+        return Err("This account is not removed.".into());
+    }
+    let target = account::read_profile(&home, &profile).await.email
+        .ok_or("Could not verify this account's email. Try again after Codex sign-in is available.")?;
+    let target_key = email_key(&target);
+    for item in saved {
+        if item.id == profile || profiles::is_removed(&home, &item.id) || !profiles::is_connected(&home, &item.id) {
+            continue;
+        }
+        let active = account::read_profile(&home, &item.id).await.email
+            .ok_or("Could not verify every connected account. Refresh and try again.")?;
+        if email_key(&active) == target_key {
+            return Err(format!("{target} is already connected. Remove the other profile before restoring this one."));
+        }
     }
     profiles::restore(&home, &profile)
 }

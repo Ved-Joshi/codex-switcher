@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 
 type Profile = { id: string; label: string; customName: string | null };
 type RemovedAccount = { profile: Profile; email: string | null };
+type ProfileList = { profiles: Profile[]; notice: string | null };
 type WindowUsage = { durationMinutes: number; remainingPercent: number; resetsAt: number | null };
 type AccountStatus = {
   profile: string;
@@ -45,6 +46,7 @@ let editingProfile: string | null = null;
 let editingDraft = "";
 let removingProfile: string | null = null;
 let lastUpdateCheck = 0;
+let pendingProfileNotice: string | null = null;
 
 function versionParts(value: string): number[] | null {
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(value.trim());
@@ -323,8 +325,13 @@ async function refresh() {
   refreshButton.classList.add("spinning");
   updated.textContent = "Refreshing…";
   try {
-    const profiles = await invoke<Profile[]>("list_profiles");
+    const result = await invoke<ProfileList>("list_profiles");
     if (current !== generation) return;
+    const profiles = result.profiles;
+    if (result.notice) {
+      if (panelOpen) notify(result.notice);
+      else pendingProfileNotice = result.notice;
+    }
     latestProfiles = profiles;
     const ids = new Set(profiles.map((profile) => profile.id));
     if (removingProfile && !ids.has(removingProfile)) removingProfile = null;
@@ -394,7 +401,12 @@ function renderRemovedAccounts(removed: RemovedAccount[]) {
     row.append(make("span", "managed-name", accountName));
     const button = make("button", "manage-button", "Restore") as HTMLButtonElement;
     button.type = "button";
-    button.setAttribute("aria-label", `Restore ${accountName}`);
+    const alreadyConnected = !!email && [...statuses.values()].some((status) =>
+      status.email?.trim().toLowerCase() === email.trim().toLowerCase(),
+    );
+    button.textContent = alreadyConnected ? "Already connected" : "Restore";
+    button.disabled = alreadyConnected;
+    button.setAttribute("aria-label", alreadyConnected ? `${accountName} is already connected` : `Restore ${accountName}`);
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
@@ -477,6 +489,10 @@ void listen("panel-opened", () => {
   render();
   showSettings(false);
   message.hidden = true;
+  if (pendingProfileNotice) {
+    notify(pendingProfileNotice);
+    pendingProfileNotice = null;
+  }
   void refresh();
   void checkForUpdates();
 });
