@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 type Profile = { id: string; label: string; customName: string | null };
+type RemovedAccount = { profile: Profile; email: string | null };
 type WindowUsage = { durationMinutes: number; remainingPercent: number; resetsAt: number | null };
 type AccountStatus = {
   profile: string;
@@ -327,7 +328,7 @@ async function refreshSettings() {
   try {
     const [status, removed] = await Promise.all([
       invoke<ShellStatus>("get_shell_status"),
-      invoke<Profile[]>("list_removed_profiles"),
+      invoke<RemovedAccount[]>("list_removed_profiles"),
     ]);
     launchToggle.checked = status.launchAtLogin;
     launchToggle.disabled = !status.launchAtLoginAvailable;
@@ -339,15 +340,16 @@ async function refreshSettings() {
   }
 }
 
-function renderManagedAccounts(removed: Profile[]) {
+function renderManagedAccounts(removed: RemovedAccount[]) {
   managedAccounts.replaceChildren();
   removedAccounts.replaceChildren();
   for (const profile of latestProfiles) {
     const row = make("div", "managed-row");
-    row.append(make("span", "managed-name", displayName(profile, statuses.get(profile.id))));
+    const accountName = statuses.get(profile.id)?.email || displayName(profile, statuses.get(profile.id));
+    row.append(make("span", "managed-name", accountName));
     const button = make("button", "manage-button", "Remove") as HTMLButtonElement;
     button.type = "button";
-    button.setAttribute("aria-label", `Remove ${displayName(profile, statuses.get(profile.id))} from switcher`);
+    button.setAttribute("aria-label", `Remove ${accountName} from switcher`);
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
@@ -363,12 +365,13 @@ function renderManagedAccounts(removed: Profile[]) {
     managedAccounts.append(row);
   }
   if (latestProfiles.length === 0) managedAccounts.append(make("p", "settings-note", "No connected accounts."));
-  for (const profile of removed) {
+  for (const { profile, email } of removed) {
     const row = make("div", "managed-row");
-    row.append(make("span", "managed-name", profile.customName || profile.label));
+    const accountName = email || profile.customName || profile.label;
+    row.append(make("span", "managed-name", accountName));
     const button = make("button", "manage-button", "Restore") as HTMLButtonElement;
     button.type = "button";
-    button.setAttribute("aria-label", `Restore ${profile.customName || profile.label}`);
+    button.setAttribute("aria-label", `Restore ${accountName}`);
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {

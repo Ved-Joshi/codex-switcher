@@ -39,6 +39,13 @@ struct ConnectResult {
     message: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemovedAccount {
+    profile: profiles::Profile,
+    email: Option<String>,
+}
+
 #[tauri::command]
 async fn list_profiles(app: tauri::AppHandle) -> Result<Vec<profiles::Profile>, String> {
     let home = app
@@ -67,13 +74,14 @@ async fn list_profiles(app: tauri::AppHandle) -> Result<Vec<profiles::Profile>, 
 }
 
 #[tauri::command]
-fn list_removed_profiles(app: tauri::AppHandle) -> Result<Vec<profiles::Profile>, String> {
+async fn list_removed_profiles(app: tauri::AppHandle) -> Result<Vec<RemovedAccount>, String> {
     let home = app.path().home_dir().map_err(|_| "Could not find the home directory.")?;
     let mut removed = Vec::new();
     for mut profile in profiles::list(&home)? {
         if profiles::is_removed(&home, &profile.id) {
             profile.custom_name = saved_profile_name(&app, &profile.id)?;
-            removed.push(profile);
+            let email = account::read_profile(&home, &profile.id).await.email;
+            removed.push(RemovedAccount { profile, email });
         }
     }
     Ok(removed)
