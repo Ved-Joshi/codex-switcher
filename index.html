@@ -24,11 +24,10 @@
       </section>
       <section id="settings-view" class="view" hidden aria-labelledby="panel-heading">
         <div class="settings-card"><label class="toggle-row" for="launch-at-login"><span><strong>Open at login</strong><small>Keep Codex Switcher in the menu bar.</small></span><input id="launch-at-login" type="checkbox" /></label></div>
-        <div class="settings-card">
-          <h2>Manage accounts</h2>
-          <div id="managed-accounts" class="managed-accounts"></div>
-          <div id="removed-accounts" class="removed-accounts" hidden></div>
-          <p class="settings-note">Removing an account hides it here. Its Codex data stays on this Mac and you can restore it later.</p>
+        <div id="removed-card" class="settings-card" hidden>
+          <h2>Removed accounts</h2>
+          <div id="removed-accounts" class="removed-accounts"></div>
+          <p class="settings-note">Restore an account to show it in the switcher again. Its Codex data has stayed on this Mac.</p>
         </div>
         <div class="settings-card">
           <h2>About</h2>

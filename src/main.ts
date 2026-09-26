@@ -31,7 +31,7 @@ const launchToggle = document.querySelector<HTMLInputElement>("#launch-at-login"
 const panelHeading = document.querySelector<HTMLElement>("#panel-heading")!;
 const settingsButton = document.querySelector<HTMLButtonElement>("#settings-button")!;
 const backButton = document.querySelector<HTMLButtonElement>("#back-button")!;
-const managedAccounts = document.querySelector<HTMLElement>("#managed-accounts")!;
+const removedCard = document.querySelector<HTMLElement>("#removed-card")!;
 const removedAccounts = document.querySelector<HTMLElement>("#removed-accounts")!;
 const appVersion = document.querySelector<HTMLElement>("#app-version")!;
 const updateStatus = document.querySelector<HTMLElement>("#update-status")!;
@@ -43,6 +43,7 @@ let statuses = new Map<string, AccountStatus>();
 let panelOpen = false;
 let editingProfile: string | null = null;
 let editingDraft = "";
+let removingProfile: string | null = null;
 let lastUpdateCheck = 0;
 
 function versionParts(value: string): number[] | null {
@@ -186,17 +187,19 @@ async function saveName(profile: Profile) {
 function render() {
   const activeEdit = document.activeElement?.classList.contains("rename-input") ?? false;
   const caret = activeEdit ? (document.activeElement as HTMLInputElement).selectionStart : null;
+  const listScrollTop = accounts.scrollTop;
   accounts.replaceChildren();
   const duplicates = duplicateEmails();
   const visibleProfiles = latestProfiles.filter((profile) => statuses.has(profile.id));
   if (visibleProfiles.length === 0) {
     accounts.append(make("p", "empty-state", updated.textContent === "Refreshing…"
-      ? "Checking connected accounts…" : "No connected accounts yet. Connect one to get started."));
+      ? "Checking connected accounts…" : "No connected accounts. Connect one here or restore one in Settings."));
     return;
   }
   for (const profile of visibleProfiles) {
     const status = statuses.get(profile.id);
     const card = make("article", "account-card");
+    card.dataset.profile = profile.id;
     const header = make("div", "account-head");
     const details = make("div", "identity-text");
     const nameRow = make("div", "name-row");
@@ -252,7 +255,17 @@ function render() {
         open.disabled = false;
       }
     });
-    header.append(details, open);
+    const actions = make("div", "account-actions");
+    const remove = make("button", "remove-button", "Remove") as HTMLButtonElement;
+    remove.type = "button";
+    remove.setAttribute("aria-label", `Remove ${displayName(profile, status)} from switcher`);
+    remove.addEventListener("click", () => {
+      removingProfile = profile.id;
+      render();
+      accounts.querySelector<HTMLButtonElement>(".remove-confirm .confirm-remove")?.focus();
+    });
+    actions.append(open, remove);
+    header.append(details, actions);
     card.append(header);
     if (status?.email && duplicates.has(status.email.toLowerCase())) {
       card.append(make("p", "card-alert", "This sign-in also appears in another profile."));
@@ -263,6 +276,37 @@ function render() {
     if (status && (!status.signedIn || status.usageError || status.error)) {
       card.append(make("p", "card-note", status.error ?? status.usageError ?? "Sign in through Codex to see usage."));
     }
+    if (removingProfile === profile.id) {
+      const confirm = make("div", "remove-confirm");
+      confirm.setAttribute("role", "group");
+      confirm.setAttribute("aria-label", `Confirm removal of ${displayName(profile, status)}`);
+      confirm.append(make("p", "", "Remove this account from the switcher? Its Codex data stays on this Mac."));
+      const confirmActions = make("div", "remove-confirm-actions");
+      const cancel = make("button", "", "Cancel") as HTMLButtonElement;
+      cancel.type = "button";
+      cancel.addEventListener("click", () => {
+        removingProfile = null;
+        render();
+        accounts.querySelector<HTMLElement>(`.account-card[data-profile="${profile.id}"] .remove-button`)?.focus();
+      });
+      const confirmRemove = make("button", "confirm-remove", "Remove account") as HTMLButtonElement;
+      confirmRemove.type = "button";
+      confirmRemove.addEventListener("click", async () => {
+        confirmRemove.disabled = true;
+        try {
+          await invoke("remove_account", { profile: profile.id });
+          removingProfile = null;
+          await refresh();
+          notify(`${displayName(profile, status)} was removed from the switcher. You can restore it in Settings.`);
+        } catch (error) {
+          notify(`Could not remove account: ${String(error)}`, true);
+          confirmRemove.disabled = false;
+        }
+      });
+      confirmActions.append(cancel, confirmRemove);
+      confirm.append(confirmActions);
+      card.append(confirm);
+    }
     accounts.append(card);
   }
   if (activeEdit) {
@@ -270,6 +314,7 @@ function render() {
     input?.focus();
     if (caret !== null) input?.setSelectionRange(caret, caret);
   }
+  accounts.scrollTop = listScrollTop;
 }
 
 async function refresh() {
@@ -282,6 +327,7 @@ async function refresh() {
     if (current !== generation) return;
     latestProfiles = profiles;
     const ids = new Set(profiles.map((profile) => profile.id));
+    if (removingProfile && !ids.has(removingProfile)) removingProfile = null;
     statuses = new Map([...statuses].filter(([id]) => ids.has(id)));
     render();
     let index = 0;
@@ -333,38 +379,15 @@ async function refreshSettings() {
     launchToggle.checked = status.launchAtLogin;
     launchToggle.disabled = !status.launchAtLoginAvailable;
     appVersion.textContent = `version ${status.version}`;
-    renderManagedAccounts(removed);
+    renderRemovedAccounts(removed);
     if (status.startupError) notify(status.startupError, true);
   } catch (error) {
     notify(`Could not read settings: ${String(error)}`, true);
   }
 }
 
-function renderManagedAccounts(removed: RemovedAccount[]) {
-  managedAccounts.replaceChildren();
+function renderRemovedAccounts(removed: RemovedAccount[]) {
   removedAccounts.replaceChildren();
-  for (const profile of latestProfiles) {
-    const row = make("div", "managed-row");
-    const accountName = statuses.get(profile.id)?.email || displayName(profile, statuses.get(profile.id));
-    row.append(make("span", "managed-name", accountName));
-    const button = make("button", "manage-button", "Remove") as HTMLButtonElement;
-    button.type = "button";
-    button.setAttribute("aria-label", `Remove ${accountName} from switcher`);
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      try {
-        await invoke("remove_account", { profile: profile.id });
-        await refresh();
-        await refreshSettings();
-      } catch (error) {
-        notify(`Could not remove account: ${String(error)}`, true);
-        button.disabled = false;
-      }
-    });
-    row.append(button);
-    managedAccounts.append(row);
-  }
-  if (latestProfiles.length === 0) managedAccounts.append(make("p", "settings-note", "No connected accounts."));
   for (const { profile, email } of removed) {
     const row = make("div", "managed-row");
     const accountName = email || profile.customName || profile.label;
@@ -386,10 +409,14 @@ function renderManagedAccounts(removed: RemovedAccount[]) {
     row.append(button);
     removedAccounts.append(row);
   }
-  removedAccounts.hidden = removed.length === 0;
+  removedCard.hidden = removed.length === 0;
 }
 
 function showSettings(show: boolean) {
+  if (show && removingProfile) {
+    removingProfile = null;
+    render();
+  }
   document.querySelector<HTMLElement>("#accounts-view")!.hidden = show;
   document.querySelector<HTMLElement>("#settings-view")!.hidden = !show;
   panelHeading.textContent = show ? "Settings" : "Accounts";
@@ -446,6 +473,8 @@ document.addEventListener("keydown", (event) => {
 });
 void listen("panel-opened", () => {
   panelOpen = true;
+  removingProfile = null;
+  render();
   showSettings(false);
   message.hidden = true;
   void refresh();

@@ -72,6 +72,7 @@ h1 { margin: 0; font-size: 19px; font-weight: 680; letter-spacing: -.035em; line
   background: linear-gradient(145deg,rgba(242,250,255,.08),rgba(177,221,246,.025));
 }
 .account-head { gap: 10px; }
+.account-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .identity-text { flex: 1; min-width: 0; }
 .name-row { gap: 5px; min-width: 0; }
 .account-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
@@ -84,6 +85,13 @@ h1 { margin: 0; font-size: 19px; font-weight: 680; letter-spacing: -.035em; line
 .rename-action { color: #b9ecff; font-weight: 750; }
 .open-button { flex: none; padding: 5px 10px; border: 1px solid rgba(186,233,255,.38); border-radius: 8px; background: rgba(166,220,245,.15); color: #e5f7ff; font-size: 11px; font-weight: 700; }
 .open-button:hover { background: rgba(166,220,245,.28); }
+.remove-button { border: 0; background: transparent; color: #b8ccda; font-size: 10px; font-weight: 650; }
+.remove-button:hover { color: #fff; }
+.remove-confirm { margin-top: 10px; padding: 9px 10px; border: 1px solid rgba(223,244,255,.16); border-radius: 9px; background: rgba(11,25,40,.28); }
+.remove-confirm p { margin: 0 0 8px; color: #d5e5ef; font-size: 10px; line-height: 1.4; }
+.remove-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.remove-confirm-actions button { border: 0; background: transparent; color: #c5e7fa; font-size: 10px; font-weight: 700; }
+.remove-confirm-actions .confirm-remove { color: #ffceba; }
 .usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px; }
 .usage-tile { min-width: 0; }
 .usage-tile + .usage-tile { padding-left: 14px; border-left: 1px solid rgba(218,241,255,.15); }
@@ -115,8 +123,7 @@ h1 { margin: 0; font-size: 19px; font-weight: 680; letter-spacing: -.035em; line
 .settings-card { margin: 5px 3px 0; padding: 14px; border: 1px solid rgba(223,244,255,.18); border-radius: 15px; background: rgba(238,250,255,.1); }
 #settings-view { overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(218,241,255,.28) transparent; }
 .settings-card h2 { margin: 0 0 9px; color: #edf4fc; font-size: 12px; font-weight: 700; }
-.managed-accounts, .removed-accounts { display: flex; flex-direction: column; gap: 7px; }
-.removed-accounts { margin-top: 12px; padding-top: 11px; border-top: 1px solid rgba(223,244,255,.15); }
+.removed-accounts { display: flex; flex-direction: column; gap: 7px; }
 .managed-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
 .managed-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .manage-button { flex: none; border: 0; background: transparent; color: #c5e7fa; font-size: 10px; font-weight: 700; }
